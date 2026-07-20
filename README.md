@@ -4,7 +4,7 @@
 
 Este é um script de backup automatizado para servidores Minecraft rodando em containers Docker. Ele para o servidor graciosamente, cria backups marcados por data e hora dos dados do seu mundo, e reinicia o container — tudo de forma automatizada.
 
-Requerimentos
+## Requerimentos
 
 - Docker (com docker-compose ou docker compose command)
 - Bash shell
@@ -12,7 +12,7 @@ Requerimentos
 - RCON habilitado no server.properties
 - rcon-cli on the container (for Minecraft Java Edition)
 
-Instruções
+## Instruções
 
 1. Pare o container `docker stop nome-container`
 2. Faça uma cópia `cp -r /caminho/container/container-mc /caminho/container/container-mc.bkp`
