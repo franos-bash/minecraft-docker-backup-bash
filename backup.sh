@@ -138,7 +138,7 @@ compose_up_d() {
 CONTAINER_NAME="$(
   sed -nE 's/^[[:space:]]*container_name:[[:space:]]*([^#]+).*/\1/p' "$COMPOSE_FILE" \
   | head -n 1 \
-  | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'']//; s/["'"']$//'
+  | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'"']//; s/["'"'"']$//'
 )"
 
 if [[ -z "${CONTAINER_NAME:-}" ]]; then
