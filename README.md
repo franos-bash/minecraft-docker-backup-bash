@@ -4,10 +4,33 @@
 
 This is an automated backup script for Minecraft servers running in Docker containers. It gracefully stops the server, creates timestamped backups of your world data, and restarts the container—all while safely managing player sessions and maintaining a configurable history of backups.
 
+## Requirements
+
+- Docker (with `docker-compose` or `docker compose` command)
+- Bash shell
+- `rsync` for backup copying
+- RCON enabled in your `server.properties`
+- `rcon-cli` tool available in the container (for Minecraft Java Edition)
+
+
+## Setup Instructions
+
+1. Stop your server container `docker stop container-name`
+2. Make a copy of your entire container directory before testing `cp -r /container/path/mc-container /container/path/mc-container.bkp`
+3. Start the Container `cd /container/path/mc-container && docker-compose up -d`
+4. Download backup.sh file
+5. Place it on the same directory as your minecraft server's docker-compose.yml file
+6. Make the script executable `sudo chmod +x backup.sh` or on GUI: right click on file > properties > execute as program
+7. Check if server is running healthy`docker ps` 
+8. run the script `./backup.sh`.
+9. watch output to check for errors
+10. If everything works as expected set up a cron job to run it on a schedule
+
+!!! This will start a 5 min timer, kick all players and restart the server when it ends !!!
+
 ## How it works
 
 This script works by reading a `docker-compose` file that is in the same directory as itself. For example:
-
 
 ```bash
 mc-container/
@@ -42,6 +65,8 @@ user@server:~$ crontab -e
 ```
 
 In this example, the script will run every day at **4:00 AM** and **4:00 PM** (16:00). The cron format is `minute hour day month weekday`.
+
+Visit https://crontab.guru/ to check crontab syntax if not sure
 
 ## What it does
 
@@ -94,32 +119,6 @@ CONTAINER_CHECK_RETRIES=3 # Retry attempts to start container
 - **Disk space aware**: Checks available disk space before proceeding
 - **Log rotation**: Automatically rotates log files when they exceed size limit
 - **Player-friendly**: Broadcasts warning messages to connected players before restart
-
-## Requirements
-
-- Docker (with `docker-compose` or `docker compose` command)
-- Bash shell
-- `rsync` for backup copying
-- RCON enabled in your `server.properties`
-- `rcon-cli` tool available in the container (for Minecraft Java Edition)
-
-## Setup
-
-1. Place `backup.sh` in the same directory as your `docker-compose.yml`
-2. Make the script executable:
-   ```bash
-   chmod +x backup.sh
-   ```
-3. Ensure your `docker-compose.yml` includes:
-   - A `container_name` field
-   - A volume mapping for `/data` or `/minecraft/data` in the container
-4. Enable RCON in your Minecraft server's `server.properties`:
-   ```properties
-   enable-rcon=true
-   rcon.port=25575
-   rcon.password=your-secure-password
-   ```
-5. Add a cronjob to run the script on your desired schedule (see "Setting up automatic backups with cron" above)
 
 ## Troubleshooting
 
