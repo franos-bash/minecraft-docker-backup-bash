@@ -4,6 +4,29 @@
 
 Este é um script de backup automatizado para servidores Minecraft rodando em containers Docker. Ele para o servidor graciosamente, cria backups marcados por data e hora dos dados do seu mundo, e reinicia o container — tudo de forma automatizada.
 
+Requerimentos
+
+- Docker (com docker-compose ou docker compose command)
+- Bash shell
+- rsync para copiar os dados
+- RCON habilitado no server.properties
+- rcon-cli on the container (for Minecraft Java Edition)
+
+Instruções
+
+1. Pare o container `docker stop nome-container`
+2. Faça uma cópia `cp -r /caminho/container/container-mc /caminho/container/container-mc.bkp`
+3. Inicie o container `cd /caminho/container/container-mc && docker-compose up -d`
+4. Baixe o arquivo backup.sh
+6. Coloque o script no mesmo diretório do arquivo docker-compose.yml do servidor minecraft
+7. Torne o script executável `sudo chmod +x backup.sh` ou na GUI: clique direito > propriedades > permitir executar como um programa
+8. Verifique se o container está rodando saudável `docker ps`
+9. Execute o script `./backup.sh.`
+10. Observe o retorno no terminal caso ocorra algum erro
+11. Se tudo funcionar normalmente, faça um cron job para executar o script com recorrência
+
+!!! Isso vai kickar todos os players, e reiniciar o container !!!
+
 ## Como funciona
 
 Este script funciona lendo um arquivo `docker-compose` que está no mesmo diretório que ele. Por exemplo:
@@ -38,6 +61,8 @@ user@server:~$ crontab -e
 ```
 
 Neste exemplo, o script será executado todos os dias às **4:00 da manhã** e às **4:00 da tarde** (16:00). O formato do cron é `minuto hora dia mês dia_da_semana`.
+
+Visite o site https://crontab.guru/ para ajuda no formato do crontab
 
 ## O que ele faz
 
@@ -90,32 +115,6 @@ CONTAINER_CHECK_RETRIES=3 # Tentativas de iniciar o container
 - **Consciente de espaço**: Verifica espaço disponível em disco antes de prosseguir
 - **Rotação de log**: Rotaciona automaticamente arquivos de log quando excedem limite de tamanho
 - **Amigável com jogadores**: Envia mensagens de aviso aos jogadores conectados antes de reiniciar
-
-## Requisitos
-
-- Docker (com comando `docker-compose` ou `docker compose`)
-- Shell Bash
-- `rsync` para cópia de backup
-- RCON habilitado em seu `server.properties`
-- Ferramenta `rcon-cli` disponível no container (para Minecraft Java Edition)
-
-## Configuração
-
-1. Coloque `backup.sh` no mesmo diretório que seu `docker-compose.yml`
-2. Torne o script executável:
-   ```bash
-   chmod +x backup.sh
-   ```
-3. Certifique-se de que seu `docker-compose.yml` inclui:
-   - Um campo `container_name`
-   - Um mapeamento de volume para `/data` ou `/minecraft/data` no container
-4. Habilite RCON no arquivo `server.properties` do seu Minecraft:
-   ```properties
-   enable-rcon=true
-   rcon.port=25575
-   rcon.password=sua-senha-segura
-   ```
-5. Adicione um cronjob para executar o script na sua programação desejada (veja "Configurando backups automáticos com cron" acima)
 
 ## Solução de Problemas
 
