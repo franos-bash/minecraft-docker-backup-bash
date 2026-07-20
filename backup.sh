@@ -67,12 +67,12 @@ fi
 # Validates docker-compose config
 validate_compose_config() {
   if command -v docker-compose >/dev/null 2>&1; then
-    if ! docker-compose config >/dev/null 2>&1; then
+    if ! docker-compose -f "$COMPOSE_FILE" config >/dev/null 2>&1; then
       log "ERROR: Invalid docker-compose configuration"
       exit 1
     fi
   elif command -v docker >/dev/null 2>&1; then
-    if ! docker compose config >/dev/null 2>&1; then
+    if ! docker compose -f "$COMPOSE_FILE" config >/dev/null 2>&1; then
       log "ERROR: Invalid docker compose configuration"
       exit 1
     fi
@@ -118,19 +118,19 @@ WORLD_SRC="$DATA_DIR/world"
 SERVER_PROPERTIES_FILE="$DATA_DIR/server.properties"
 
 # ====== DOCKER COMPOSE HELPERS ======
-compose_up_down() {
+compose_cmd() {
   if command -v docker-compose >/dev/null 2>&1; then
-    echo docker-compose
+    echo "docker-compose"
   else
-    echo docker
+    echo "docker"
   fi
 }
 
 compose_up_d() {
-  if [[ "$(compose_up_down)" == "docker-compose" ]]; then
-    docker-compose up -d
+  if [[ "$(compose_cmd)" == "docker-compose" ]]; then
+    docker-compose -f "$COMPOSE_FILE" up -d
   else
-    docker compose up -d
+    docker compose -f "$COMPOSE_FILE" up -d
   fi
 }
 
@@ -245,18 +245,14 @@ rcon() {
 
 # Tests RCON connection before starting
 test_rcon() {
-  set +e
-  rcon list >/dev/null 2>&1
-  local rc=$?
-  set -e
-  return $rc
+  local rc=0
+  rcon list >/dev/null 2>&1 || rc=$?
+  return "$rc"
 }
 
 players_online_list() {
   local out
-  set +e
-  out="$(rcon list 2>/dev/null)"
-  set -e
+  out="$(rcon list 2>/dev/null || echo "")"
 
   # Tries to extract player list from RCON response
   # Typical format: "There are X of Y players online: player1, player2, ..."
@@ -270,9 +266,7 @@ players_online_list() {
 
 players_online_count() {
   local out
-  set +e
-  out="$(rcon list 2>/dev/null)"
-  set -e
+  out="$(rcon list 2>/dev/null || echo "")"
 
   if [[ "$out" =~ There\ are\ ([0-9]+)\ of ]]; then
     echo "${BASH_REMATCH[1]}"
@@ -290,7 +284,7 @@ players_online_count() {
 broadcast_if_players() {
   local msg="$1"
   local n
-  n="$(players_online_count || true)"
+  n="$(players_online_count || echo 0)"
   if [[ "$n" =~ ^[0-9]+$ ]] && (( n > 0 )); then
     rcon say "$msg" >/dev/null 2>&1 || true
   fi
@@ -462,7 +456,6 @@ run_step() {
   local spin_pid
   local rc=0
 
-  set +e
   "$@" >"$log_file" 2>&1 &
   cmd_pid=$!
 
@@ -478,7 +471,6 @@ run_step() {
   if [[ $rc -eq 0 ]]; then
     printf "\r✓ %s\n" "$msg"
     rm -f "$log_file"
-    set -e
   else
     printf "\r✗ %s\n" "$msg"
     log "---- command output (last 50 lines) ----"
@@ -495,11 +487,11 @@ restart_without_backup() {
   echo "No activity detected - skipping backup"
   
   local player_count
-  player_count="$(players_online_count || true)"
+  player_count="$(players_online_count || echo 0)"
   
   if [[ "$player_count" =~ ^[0-9]+$ ]] && (( player_count > 0 )); then
     local player_list
-    player_list="$(players_online_list || true)"
+    player_list="$(players_online_list || echo "")"
     log "Players online: $player_count - $player_list"
     
     broadcast_if_players "WARNING: Server restarting in 5 minutes"
@@ -544,11 +536,11 @@ backup_with_restart() {
   echo "Backup: ${WORLD_SRC} -> ${BKP_ROOT} (timestamped by date+hour)"
 
   local player_count
-  player_count="$(players_online_count || true)"
+  player_count="$(players_online_count || echo 0)"
   
   if [[ "$player_count" =~ ^[0-9]+$ ]] && (( player_count > 0 )); then
     local player_list
-    player_list="$(players_online_list || true)"
+    player_list="$(players_online_list || echo "")"
     log "Players online: $player_count - $player_list"
     
     broadcast_if_players "WARNING: Server restarting in 5 minutes - Automatic backup"
