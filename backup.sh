@@ -1,25 +1,25 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# SCRIPT DEVELOPED BY FRANCO'S ORGANIC INTELLIGENCE WITH HELP FROM DUCK.AI ARTIFICIAL INTELLIGENCE
+# SCRIPT DESENVOLVIDO PELA INTELIGÊNCIA ORGÂNICA DE FRANCO COM AJUDA DA INTELIGÊNCIA ARTIFICIAL DO DUCK.AI
 #
-# This script was developed to backup data from a Minecraft server world running in Docker
-# The proposal is that this script follows the logic of a container, it works based on the location where it is,
-# which needs to be the same directory as the docker-compose.yaml file.
-# The script also expects that the folder containing the data is mapped in the docker-compose.yaml
-# The backup destination is a directory that, if it doesn't exist, is created and is called /autobackup,
-# it stays in the same directory as the script.
-# For the script to work automatically, it depends on a cronjob,
-# just place the script in the correct location and point the path in the crontab.
+# Este script foi desenvolvido para fazer backup dos dados de um mundo de um servidor Minecraft rodando em Docker
+# A proposta é que este script siga a lógica de um container, ele funciona baseado no local onde está,
+# que precisa ser o mesmo diretório do arquivo docker-compose.yaml.
+# O script também espera que a pasta contendo os dados esteja mapeada no docker-compose.yaml
+# O destino do backup é um diretório que, se não existir, é criado e se chama /autobackup,
+# fica no mesmo diretório do script.
+# Para o script funcionar de forma automática, depende de um cronjob,
+# basta colocar o script no local correto e apontar o caminho no crontab.
 
-# ====== CONFIGURATIONS ======
-RCON_STOP_TIMEOUT=30      # Timeout for graceful server shutdown (seconds)
-MAX_BACKUP_COPIES=10      # Keep a maximum of 10 backup copies (keep the most recent)
-MIN_DISK_SPACE_MB=1000    # Minimum disk space before backup (MB)
-LOG_SIZE_LIMIT=10485760   # 10MB - rotate log when reaching this size
-CONTAINER_CHECK_RETRIES=3 # Number of attempts to start container
+# ====== CONFIGURAÇÕES ======
+RCON_STOP_TIMEOUT=30      # Tempo limite para parada graciosa do servidor (segundos)
+MAX_BACKUP_COPIES=10      # Manter no máximo 10 cópias de backup (manter as mais recentes)
+MIN_DISK_SPACE_MB=1000    # Espaço mínimo em disco antes de fazer backup (MB)
+LOG_SIZE_LIMIT=10485760   # 10MB - rotacionar log quando atingir este tamanho
+CONTAINER_CHECK_RETRIES=3 # Número de tentativas para iniciar o container
 
-# ====== PATHS ======
+# ====== CAMINHOS ======
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
@@ -27,21 +27,21 @@ LOCK_FILE="$SCRIPT_DIR/.backup.lock"
 LOG_FILE="$SCRIPT_DIR/autobkp.log"
 LAST_BACKUP_MARKER="$SCRIPT_DIR/.backup-last-time"
 
-# ====== SETUP ======
-# Function for cleanup in case of error
+# ====== CONFIGURAÇÃO ======
+# Função para limpeza em caso de erro
 cleanup() {
   rm -f "$LOCK_FILE"
 }
 trap cleanup EXIT
 
-# Rotates log if it gets too large
+# Rotaciona log se ficar muito grande
 rotate_log_if_needed() {
   if [[ -f "$LOG_FILE" ]]; then
     local log_size
     log_size=$(stat -f%z "$LOG_FILE" 2>/dev/null || stat -c%s "$LOG_FILE" 2>/dev/null || echo 0)
     if (( log_size > LOG_SIZE_LIMIT )); then
       mv "$LOG_FILE" "${LOG_FILE}.$(date +%s)"
-      log "Log rotated (previous size: ${log_size} bytes)"
+      log "Log rotacionado (tamanho anterior: ${log_size} bytes)"
     fi
   fi
 }
@@ -53,43 +53,43 @@ log() {
   echo "[$timestamp] $msg" | tee -a "$LOG_FILE"
 }
 
-# ====== DOCKER COMPOSE FILE ======
+# ====== ARQUIVO DOCKER COMPOSE ======
 COMPOSE_FILE=""
 if [[ -f "$SCRIPT_DIR/docker-compose.yml" ]]; then
   COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yml"
 elif [[ -f "$SCRIPT_DIR/docker-compose.yaml" ]]; then
   COMPOSE_FILE="$SCRIPT_DIR/docker-compose.yaml"
 else
-  log "ERROR: docker-compose.yml or docker-compose.yaml not found in: $SCRIPT_DIR"
+  log "ERRO: docker-compose.yml ou docker-compose.yaml não encontrado em: $SCRIPT_DIR"
   exit 1
 fi
 
-# Validates docker-compose config
+# Valida a configuração do docker-compose
 validate_compose_config() {
   if command -v docker-compose >/dev/null 2>&1; then
     if ! docker-compose config >/dev/null 2>&1; then
-      log "ERROR: Invalid docker-compose configuration"
+      log "ERRO: Configuração do docker-compose inválida"
       exit 1
     fi
   elif command -v docker >/dev/null 2>&1; then
     if ! docker compose config >/dev/null 2>&1; then
-      log "ERROR: Invalid docker compose configuration"
+      log "ERRO: Configuração do docker compose inválida"
       exit 1
     fi
   else
-    log "ERROR: docker or docker-compose not found"
+    log "ERRO: docker ou docker-compose não encontrado"
     exit 1
   fi
 }
 
-# ====== EXTRACT DATA DIR FROM DOCKER-COMPOSE ======
-# Extracts the DATA_DIR path from docker-compose.yaml
-# Searches for volumes mapped to /data in the container
+# ====== EXTRAIR DIRETÓRIO DE DADOS DO DOCKER-COMPOSE ======
+# Extrai o caminho DATA_DIR do docker-compose.yaml
+# Procura por volumes mapeados para /data no container
 get_data_dir_from_compose() {
   local data_dir=""
   
-  # Tries to find volumes that map to /data or /minecraft/data in the container
-  # Syntax: - ./path:/data or - /absolute/path:/data
+  # Tenta encontrar volumes que mapeiam para /data ou /minecraft/data no container
+  # Sintaxe: - ./caminho:/data ou - /caminho/absoluto:/data
   data_dir=$(
     grep -E '^\s*-\s+.*:(/data|/minecraft/data)' "$COMPOSE_FILE" \
     | head -n 1 \
@@ -98,12 +98,12 @@ get_data_dir_from_compose() {
   )
   
   if [[ -z "$data_dir" ]]; then
-    log "ERROR: Volume for /data not found in: $COMPOSE_FILE"
-    log "Make sure your docker-compose.yaml contains a volume mapped to /data"
+    log "ERRO: Volume para /data não encontrado em: $COMPOSE_FILE"
+    log "Certifique-se de que seu docker-compose.yaml contém um volume mapeado para /data"
     exit 1
   fi
   
-  # If the path is relative (starts with .), resolve it relative to SCRIPT_DIR
+  # Se o caminho for relativo (começa com .), resolve-o em relação a SCRIPT_DIR
   if [[ "$data_dir" == ./* ]] || [[ "$data_dir" == .\\* ]]; then
     data_dir="${SCRIPT_DIR}/${data_dir#./}"
   fi
@@ -111,13 +111,13 @@ get_data_dir_from_compose() {
   echo "$data_dir"
 }
 
-# ====== DATA PATHS ======
+# ====== CAMINHOS DE DADOS ======
 BKP_ROOT="$SCRIPT_DIR/autobkp"
 DATA_DIR="$(get_data_dir_from_compose)"
 WORLD_SRC="$DATA_DIR/world"
 SERVER_PROPERTIES_FILE="$DATA_DIR/server.properties"
 
-# ====== DOCKER COMPOSE HELPERS ======
+# ====== AUXILIARES DO DOCKER COMPOSE ======
 compose_up_down() {
   if command -v docker-compose >/dev/null 2>&1; then
     echo docker-compose
@@ -134,7 +134,7 @@ compose_up_d() {
   fi
 }
 
-# ====== CONTAINER NAME ======
+# ====== NOME DO CONTAINER ======
 CONTAINER_NAME="$(
   sed -nE 's/^[[:space:]]*container_name:[[:space:]]*([^#]+).*/\1/p' "$COMPOSE_FILE" \
   | head -n 1 \
@@ -142,15 +142,15 @@ CONTAINER_NAME="$(
 )"
 
 if [[ -z "${CONTAINER_NAME:-}" ]]; then
-  log "ERROR: 'container_name:' not found in: $COMPOSE_FILE"
+  log "ERRO: 'container_name:' não encontrado em: $COMPOSE_FILE"
   exit 1
 fi
 
-# ====== FILE HELPERS ======
+# ====== AUXILIARES DE ARQUIVO ======
 require_file() {
   local f="$1"
   if [[ ! -f "$f" ]]; then
-    log "ERROR: required file not found: $f"
+    log "ERRO: arquivo obrigatório não encontrado: $f"
     exit 1
   fi
 }
@@ -172,31 +172,31 @@ get_prop() {
   echo "$v"
 }
 
-# ====== RCON CONFIGURATION ======
+# ====== CONFIGURAÇÃO RCON ======
 RCON_PASSWORD="$(get_prop "rcon.password" "$SERVER_PROPERTIES_FILE")"
 RCON_PORT="$(get_prop "rcon.port" "$SERVER_PROPERTIES_FILE")"
 
 if [[ -z "${RCON_PASSWORD:-}" ]]; then
-  log "ERROR: rcon.password not found or empty in: $SERVER_PROPERTIES_FILE"
+  log "ERRO: rcon.password não encontrado ou vazio em: $SERVER_PROPERTIES_FILE"
   exit 1
 fi
 if [[ -z "${RCON_PORT:-}" ]]; then
-  log "ERROR: rcon.port not found or empty in: $SERVER_PROPERTIES_FILE"
+  log "ERRO: rcon.port não encontrado ou vazio em: $SERVER_PROPERTIES_FILE"
   exit 1
 fi
 
 if [[ ! -d "$WORLD_SRC" ]]; then
-  log "ERROR: world directory does not exist: $WORLD_SRC"
+  log "ERRO: diretório world não existe: $WORLD_SRC"
   exit 1
 fi
 
-# ====== LOCK MANAGEMENT ======
+# ====== GERENCIAMENTO DE BLOQUEIO ======
 check_lock() {
   if [[ -f "$LOCK_FILE" ]]; then
     local lock_pid
     lock_pid="$(cat "$LOCK_FILE")"
     if kill -0 "$lock_pid" 2>/dev/null; then
-      log "ERROR: Backup is already running (PID: $lock_pid)"
+      log "ERRO: Backup já está rodando (PID: $lock_pid)"
       exit 1
     else
       rm -f "$LOCK_FILE"
@@ -205,16 +205,16 @@ check_lock() {
   echo $$ > "$LOCK_FILE"
 }
 
-# ====== CONTAINER CHECKS ======
+# ====== VERIFICAÇÕES DE CONTAINER ======
 check_container() {
   if ! docker ps --filter "name=${CONTAINER_NAME}" --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
-    log "ERROR: Container not found or not running: $CONTAINER_NAME"
+    log "ERRO: Container não encontrado ou não está rodando: $CONTAINER_NAME"
     return 1
   fi
   return 0
 }
 
-# Waits for container to start successfully (with retries)
+# Aguarda o container iniciar com sucesso (com tentativas)
 wait_container_ready() {
   local retries=$1
   local attempt=0
@@ -222,18 +222,18 @@ wait_container_ready() {
   while (( attempt < retries )); do
     sleep 2
     if check_container; then
-      log "Container started successfully"
+      log "Container iniciado com sucesso"
       return 0
     fi
     ((attempt++))
-    log "Attempt $((attempt)) of $retries waiting for container to start..."
+    log "Tentativa $((attempt)) de $retries aguardando o container iniciar..."
   done
 
-  log "ERROR: Container failed to start after $retries attempts"
+  log "ERRO: Container falhou ao iniciar após $retries tentativas"
   return 1
 }
 
-# ====== RCON HELPERS ======
+# ====== AUXILIARES RCON ======
 rcon() {
   local args=("$@")
   docker exec -i "$CONTAINER_NAME" rcon-cli \
@@ -243,7 +243,7 @@ rcon() {
     "${args[@]}"
 }
 
-# Tests RCON connection before starting
+# Testa conexão RCON antes de começar
 test_rcon() {
   set +e
   rcon list >/dev/null 2>&1
@@ -258,8 +258,8 @@ players_online_list() {
   out="$(rcon list 2>/dev/null)"
   set -e
 
-  # Tries to extract player list from RCON response
-  # Typical format: "There are X of Y players online: player1, player2, ..."
+  # Tenta extrair lista de jogadores da resposta RCON
+  # Formato típico: "There are X of Y players online: player1, player2, ..."
   if [[ "$out" =~ :\ (.+)$ ]]; then
     echo "${BASH_REMATCH[1]}"
     return 0
@@ -296,34 +296,34 @@ broadcast_if_players() {
   fi
 }
 
-# ====== TIME HELPERS ======
+# ====== AUXILIARES DE TEMPO ======
 timestamp_hour() {
   date '+%Y%m%d-%H'
 }
 
-# ====== ACTIVITY CHECK ======
+# ====== VERIFICAÇÃO DE ATIVIDADE ======
 has_activity_since_last_backup() {
   if [[ ! -f "$LAST_BACKUP_MARKER" ]]; then
-    log "First backup or marker not found, performing backup"
+    log "Primeiro backup ou marcador não encontrado, realizando backup"
     return 0
   fi
 
   local playerdata_dir recent_files
   playerdata_dir="${WORLD_SRC}/playerdata"
 
-  # Prefer checking playerdata: this usually only changes when a real player joins
+  # Preferir verificar playerdata: geralmente só muda quando um jogador real entra
   if [[ -d "$playerdata_dir" ]]; then
     recent_files=$(find "$playerdata_dir" -type f -newer "$LAST_BACKUP_MARKER" -not -name "*.tmp" 2>/dev/null | wc -l)
     if (( recent_files > 0 )); then
-      log "Player activity detected: $recent_files files modified in playerdata"
+      log "Atividade de jogadores detectada: $recent_files arquivos modificados em playerdata"
       return 0
     else
-      log "No changes in playerdata since last backup"
+      log "Nenhuma alteração em playerdata desde o último backup"
       return 1
     fi
   fi
 
-  # Fallback: if playerdata doesn't exist, use the original world scan
+  # Fallback: se playerdata não existir, usar a varredura do world original
   recent_files=$(find "$WORLD_SRC" \
     -type f \
     -newer "$LAST_BACKUP_MARKER" \
@@ -333,59 +333,59 @@ has_activity_since_last_backup() {
     2>/dev/null | wc -l)
 
   if (( recent_files > 0 )); then
-    log "Activity detected (fallback world): $recent_files files modified"
+    log "Atividade detectada (fallback world): $recent_files arquivos modificados"
     return 0
   else
-    log "No activity detected since last backup"
+    log "Nenhuma atividade detectada desde o último backup"
     return 1
   fi
 }
 
-# ====== DISK SPACE CHECK ======
+# ====== VERIFICAÇÃO DE ESPAÇO EM DISCO ======
 check_disk_space() {
   local available_mb
   available_mb="$(df "$BKP_ROOT" 2>/dev/null | tail -n 1 | awk '{print $4}')"
   
   if [[ ! "$available_mb" =~ ^[0-9]+$ ]]; then
-    log "WARN: Could not check disk space"
+    log "AVISO: Não foi possível verificar espaço em disco"
     return 0
   fi
 
   if (( available_mb < MIN_DISK_SPACE_MB )); then
-    log "ERROR: Insufficient disk space. Available: ${available_mb}MB, Required: ${MIN_DISK_SPACE_MB}MB"
+    log "ERRO: Espaço em disco insuficiente. Disponível: ${available_mb}MB, Necessário: ${MIN_DISK_SPACE_MB}MB"
     exit 1
   fi
   
-  log "Disk space OK: ${available_mb}MB available"
+  log "Espaço em disco OK: ${available_mb}MB disponível"
 }
 
-# ====== BACKUP CLEANUP ======
+# ====== LIMPEZA DE BACKUP ======
 cleanup_old_backups() {
-  log "Checking backup copy limit (maximum: ${MAX_BACKUP_COPIES})..."
+  log "Verificando limite de cópias de backup (máximo: ${MAX_BACKUP_COPIES})..."
   
   local backup_count
   backup_count=$(find "$BKP_ROOT" -maxdepth 1 -type d -name "*world*" 2>/dev/null | wc -l)
   
   if (( backup_count <= MAX_BACKUP_COPIES )); then
-    log "Total backups: $backup_count (within limit)"
+    log "Total de backups: $backup_count (dentro do limite)"
     return 0
   fi
   
   local to_remove=$(( backup_count - MAX_BACKUP_COPIES ))
-  log "Total backups: $backup_count (exceeded limit by $to_remove). Removing oldest..."
+  log "Total de backups: $backup_count (excedeu limite em $to_remove). Removendo os mais antigos..."
   
-  # Finds and removes the oldest backups
+  # Encontra e remove os backups mais antigos
   find "$BKP_ROOT" -maxdepth 1 -type d -name "*world*" -printf '%T+ %p\n' 2>/dev/null \
     | sort \
     | head -n "$to_remove" \
     | awk '{print $2}' \
     | while read -r old_backup; do
-      log "Removing old backup: $old_backup"
+      log "Removendo backup antigo: $old_backup"
       rm -rf "$old_backup"
     done
 }
 
-# ====== BACKUP EXECUTION ======
+# ====== EXECUÇÃO DE BACKUP ======
 backup_world() {
   local ts dest
   ts="$(timestamp_hour)"
@@ -396,21 +396,21 @@ backup_world() {
   mkdir -p "$dest"
 
   rsync -a --delete-delay "${WORLD_SRC}/" "${dest}/"
-  log "Backup completed: ${dest}"
+  log "Backup concluído: ${dest}"
   
-  # Calculates backup size
+  # Calcula tamanho do backup
   local backup_size
-  backup_size="$(du -sh "$dest" 2>/dev/null | awk '{print $1}' || echo 'unknown')"
-  log "Backup size: $backup_size"
+  backup_size="$(du -sh "$dest" 2>/dev/null | awk '{print $1}' || echo 'desconhecido')"
+  log "Tamanho do backup: $backup_size"
   
   touch "$LAST_BACKUP_MARKER"
 }
 
-# ====== SERVER SHUTDOWN SEQUENCE ======
+# ====== SEQUÊNCIA DE DESLIGAMENTO DO SERVIDOR ======
 countdown_30s() {
   local s
   for s in {30..1}; do
-    broadcast_if_players "WARNING: Server restarting in ${s}s"
+    broadcast_if_players "AVISO: Servidor reiniciando em ${s}s"
     sleep 1
   done
 }
@@ -419,26 +419,26 @@ kick_everyone() {
   rcon kickall >/dev/null 2>&1 || true
 }
 
-# Waits for server to stop gracefully (polling)
-# Uses 'list' instead of 'ping' as it's more reliable
+# Aguarda o servidor parar graciosamente (polling)
+# Usa 'list' em vez de 'ping' pois é mais confiável
 wait_server_stop() {
   local elapsed=0
   local max_wait=$1
   
   while (( elapsed < max_wait )); do
     if ! rcon list >/dev/null 2>&1; then
-      log "Server stopped after ${elapsed}s"
+      log "Servidor parou após ${elapsed}s"
       return 0
     fi
     sleep 1
     ((elapsed++))
   done
   
-  log "WARN: Server still responding after ${max_wait}s, forcing stop with docker stop"
+  log "AVISO: Servidor ainda respondendo após ${max_wait}s, forçando parada com docker stop"
   return 1
 }
 
-# ====== UI HELPERS ======
+# ====== AUXILIARES DE INTERFACE ======
 spinner_run() {
   local pid="$1"
   local msg="$2"
@@ -481,18 +481,18 @@ run_step() {
     set -e
   else
     printf "\r✗ %s\n" "$msg"
-    log "---- command output (last 50 lines) ----"
+    log "---- saída do comando (últimas 50 linhas) ----"
     tail -n 50 "$log_file" >> "$LOG_FILE" || true
     rm -f "$log_file"
     exit "$rc"
   fi
 }
 
-# ====== RESTART WITHOUT BACKUP ======
+# ====== REINICIAR SEM BACKUP ======
 restart_without_backup() {
-  log "Restarting server without performing backup"
+  log "Reiniciando servidor sem fazer backup"
   echo ""
-  echo "No activity detected - skipping backup"
+  echo "Nenhuma atividade detectada - pulando backup"
   
   local player_count
   player_count="$(players_online_count || true)"
@@ -500,48 +500,48 @@ restart_without_backup() {
   if [[ "$player_count" =~ ^[0-9]+$ ]] && (( player_count > 0 )); then
     local player_list
     player_list="$(players_online_list || true)"
-    log "Players online: $player_count - $player_list"
+    log "Jogadores online: $player_count - $player_list"
     
-    broadcast_if_players "WARNING: Server restarting in 5 minutes"
-    run_step "Notifying players - Restarting in 5 minutes" sleep 240
+    broadcast_if_players "AVISO: Servidor reiniciando em 5 minutos"
+    run_step "Avisando jogadores - Reiniciando em 5 minutos" sleep 240
 
-    broadcast_if_players "WARNING: Server restarting in 1 minute"
-    run_step "Notifying players - Restarting in 1 minute" sleep 30
+    broadcast_if_players "AVISO: Servidor reiniciando em 1 minuto"
+    run_step "Avisando jogadores - Reiniciando em 1 minuto" sleep 30
 
-    run_step "Notifying players - Final 30s countdown" countdown_30s
+    run_step "Avisando jogadores - Contagem final de 30s" countdown_30s
   else
-    log "No players online - skipping countdown, starting backup immediately"
+    log "Nenhum jogador online - pulando contagem regressiva, iniciando backup imediatamente"
   fi
 
-  run_step "Kicking all players" kick_everyone
+  run_step "Expulsando todos os jogadores" kick_everyone
 
-  run_step "Saving the world" rcon save-all
+  run_step "Salvando o mundo" rcon save-all
 
-  run_step "Stopping server gracefully" rcon stop
+  run_step "Parando servidor graciosamente" rcon stop
 
   if wait_server_stop "$RCON_STOP_TIMEOUT"; then
-    log "Server stopped gracefully"
+    log "Servidor parou graciosamente"
   else
-    log "Timeout waiting for server stop, forcing..."
+    log "Tempo limite aguardando parada do servidor, forçando..."
   fi
 
-  run_step "Stopping the Container" docker stop -t 60 "$CONTAINER_NAME" >/dev/null
+  run_step "Parando o Container" docker stop -t 60 "$CONTAINER_NAME" >/dev/null
 
-  run_step "Starting Container" compose_up_d
+  run_step "Iniciando Container" compose_up_d
   
   if wait_container_ready "$CONTAINER_CHECK_RETRIES"; then
-    log "Restart without backup completed successfully"
+    log "Reinicialização sem backup concluída com sucesso"
   else
-    log "ERROR: Failed to restart container"
+    log "ERRO: Falha ao reiniciar container"
     exit 1
   fi
 }
 
-# ====== BACKUP WITH RESTART ======
+# ====== BACKUP COM REINICIALIZAÇÃO ======
 backup_with_restart() {
   echo "Container: ${CONTAINER_NAME}"
-  echo "Data: ${DATA_DIR}"
-  echo "Backup: ${WORLD_SRC} -> ${BKP_ROOT} (timestamped by date+hour)"
+  echo "Dados: ${DATA_DIR}"
+  echo "Backup: ${WORLD_SRC} -> ${BKP_ROOT} (marcado por hora+data)"
 
   local player_count
   player_count="$(players_online_count || true)"
@@ -549,53 +549,53 @@ backup_with_restart() {
   if [[ "$player_count" =~ ^[0-9]+$ ]] && (( player_count > 0 )); then
     local player_list
     player_list="$(players_online_list || true)"
-    log "Players online: $player_count - $player_list"
+    log "Jogadores online: $player_count - $player_list"
     
-    broadcast_if_players "WARNING: Server restarting in 5 minutes - Automatic backup"
-    run_step "Notifying players - Restarting in 5 minutes" sleep 240
+    broadcast_if_players "AVISO: Servidor reiniciando em 5 minutos - Backup automático"
+    run_step "Avisando jogadores - Reiniciando em 5 minutos" sleep 240
 
-    broadcast_if_players "WARNING: Server restarting in 1 minute - Automatic backup"
-    run_step "Notifying players - Restarting in 1 minute" sleep 30
+    broadcast_if_players "AVISO: Servidor reiniciando em 1 minuto - Backup automático"
+    run_step "Avisando jogadores - Reiniciando em 1 minuto" sleep 30
 
-    run_step "Notifying players - Final 30s countdown" countdown_30s
+    run_step "Avisando jogadores - Contagem final de 30s" countdown_30s
   else
-    log "No players online - skipping countdown, starting backup immediately"
+    log "Nenhum jogador online - pulando contagem regressiva, iniciando backup imediatamente"
   fi
 
-  run_step "Kicking all players" kick_everyone
+  run_step "Expulsando todos os jogadores" kick_everyone
 
-  run_step "Saving the world" rcon save-all
+  run_step "Salvando o mundo" rcon save-all
 
-  run_step "Stopping server gracefully" rcon stop
+  run_step "Parando servidor graciosamente" rcon stop
 
   if wait_server_stop "$RCON_STOP_TIMEOUT"; then
-    log "Server stopped gracefully"
+    log "Servidor parou graciosamente"
   else
-    log "Timeout waiting for server stop, forcing..."
+    log "Tempo limite aguardando parada do servidor, forçando..."
   fi
 
-  run_step "Stopping the Container" docker stop -t 60 "$CONTAINER_NAME" >/dev/null
+  run_step "Parando o Container" docker stop -t 60 "$CONTAINER_NAME" >/dev/null
 
-  run_step "Copying data from world directory" backup_world
+  run_step "Copiando dados do diretório world" backup_world
 
-  run_step "Starting Container" compose_up_d
+  run_step "Iniciando Container" compose_up_d
 
   if wait_container_ready "$CONTAINER_CHECK_RETRIES"; then
     cleanup_old_backups
-    log "Backup successful, container initialized"
+    log "Backup bem-sucedido, container inicializado"
   else
-    log "ERROR: Failed to restart container after backup"
+    log "ERRO: Falha ao reiniciar container após backup"
     exit 1
   fi
 }
 
-# ====== MAIN SCRIPT ======
+# ====== SCRIPT PRINCIPAL ======
 
 rotate_log_if_needed
 
 log "=========================================="
-log "Starting backup of container: ${CONTAINER_NAME}"
-log "Data loaded from: ${DATA_DIR}"
+log "Iniciando backup do container: ${CONTAINER_NAME}"
+log "Dados carregados de: ${DATA_DIR}"
 log "=========================================="
 
 validate_compose_config
@@ -603,20 +603,20 @@ check_lock
 check_container || exit 1
 
 if ! test_rcon; then
-  log "ERROR: Failed to connect to RCON at ${CONTAINER_NAME}:${RCON_PORT}"
+  log "ERRO: Falha ao conectar ao RCON em ${CONTAINER_NAME}:${RCON_PORT}"
   exit 1
 fi
 
-# Checks if there has been activity since the last backup
+# Verifica se houve atividade desde o último backup
 if ! has_activity_since_last_backup; then
   restart_without_backup
   exit 0
 fi
 
-# If there was activity, proceed with backup
+# Se houve atividade, procede com o backup
 check_disk_space
 backup_with_restart
 
 log "=========================================="
-log "Script completed successfully"
+log "Script finalizado com sucesso"
 log "=========================================="
