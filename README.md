@@ -9,15 +9,21 @@ Este é um script de backup automatizado para servidores Minecraft rodando em co
 Este script funciona lendo um arquivo `docker-compose` que está no mesmo diretório que ele. Por exemplo:
 
 ```bash
-user@server:/path/to/minecraft-container$ ls
-backup.sh*  data/  docker-compose.yml
+mc-container/
+├── backup.sh*
+├── data/
+└── docker-compose.yml
 ```
 
 Após o script rodar pela primeira vez, ele criará um diretório para os backups e um arquivo de log:
 
 ```bash
-user@server:/path/to/minecraft-container$ ls
-autobkp/  autobkp.log  backup.sh*  data/  docker-compose.yml
+mc-container/
+├── autobkp/
+├── autobkp.log
+├── backup.sh*
+├── data/
+└── docker-compose.yml
 ```
 
 ### Configurando backups automáticos com cron
