@@ -136,7 +136,7 @@ compose_up_d() {
 CONTAINER_NAME="$(
   sed -nE 's/^[[:space:]]*container_name:[[:space:]]*([^#]+).*/\1/p' "$COMPOSE_FILE" \
   | head -n 1 \
-  | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'"']//; s/["'"'"']$//'
+  | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//' -e 's/^["'"'']//; s/["'"']$//'
 )"
 
 if [[ -z "${CONTAINER_NAME:-}" ]]; then
@@ -306,7 +306,22 @@ has_activity_since_last_backup() {
     return 0
   fi
 
-  local recent_files
+  local playerdata_dir recent_files
+  playerdata_dir="${WORLD_SRC}/playerdata"
+
+  # Prefer checking playerdata: this usually only changes when a real player joins
+  if [[ -d "$playerdata_dir" ]]; then
+    recent_files=$(find "$playerdata_dir" -type f -newer "$LAST_BACKUP_MARKER" -not -name "*.tmp" 2>/dev/null | wc -l)
+    if (( recent_files > 0 )); then
+      log "Atividade de jogadores detectada: $recent_files arquivos modificados em playerdata"
+      return 0
+    else
+      log "Nenhuma alteração em playerdata desde o último backup"
+      return 1
+    fi
+  fi
+
+  # Fallback: if playerdata doesn't exist, use the original world scan
   recent_files=$(find "$WORLD_SRC" \
     -type f \
     -newer "$LAST_BACKUP_MARKER" \
@@ -316,7 +331,7 @@ has_activity_since_last_backup() {
     2>/dev/null | wc -l)
 
   if (( recent_files > 0 )); then
-    log "Atividade detectada: $recent_files arquivos modificados"
+    log "Atividade detectada (fallback world): $recent_files arquivos modificados"
     return 0
   else
     log "Nenhuma atividade detectada desde o último backup"
