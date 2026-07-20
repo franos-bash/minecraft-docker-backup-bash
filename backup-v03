@@ -6,13 +6,13 @@ set -euo pipefail
 # Esse script foi desenvolvido para fazer backup dos dados de um mundo de um servidor de minecraft rodando em docker
 # A proposta é que esse script siga a lógica de um container, ele funciona baseado no local onde ele está, que precisa
 # ser o mesmo diretório do arquivo docker-compose.yaml.
-# O script também espera que a pasta onde estão os dados esteja também no mesmo local e se chame /data
+# O script também espera que a pasta onde estão os dados esteja mapeada no docker-compose.yaml
 # O destino do backup é um diretório que se não existe, é criado e se chama /autobackup, fica no mesmo diretório do script.
 # Para o script funcionar de forma automática, depende de um cronjob, é so colocar o script no lugar correto e apontar o caminho no crontab.
 
 # ====== CONFIGURAÇÕES ======
 RCON_STOP_TIMEOUT=30      # Timeout para parada graceful do servidor (segundos)
-BACKUP_RETENTION_DAYS=14  # Manter backups dos últimos 14 dias
+MAX_BACKUP_COPIES=10      # Manter no máximo 10 cópias de backup (manter os mais recentes)
 MIN_DISK_SPACE_MB=1000    # Espaço mínimo em disco antes de fazer backup (MB)
 LOG_SIZE_LIMIT=10485760   # 10MB - rotacionar log quando atingir este tamanho
 CONTAINER_CHECK_RETRIES=3 # Número de tentativas para iniciar container
@@ -80,9 +80,38 @@ validate_compose_config() {
   fi
 }
 
+# ====== EXTRACT DATA DIR FROM DOCKER-COMPOSE ======
+# Extrai o caminho DATA_DIR do docker-compose.yaml
+# Procura por volumes mapeados para /data no container
+get_data_dir_from_compose() {
+  local data_dir=""
+  
+  # Tenta encontrar volumes que mapeiam para /data ou /minecraft/data no container
+  # Sintaxe: - ./caminho:/data ou - /caminho/absoluto:/data
+  data_dir=$(
+    grep -E '^\s*-\s+.*:(/data|/minecraft/data)' "$COMPOSE_FILE" \
+    | head -n 1 \
+    | sed -E 's/^\s*-\s+([^:]+):.*/\1/' \
+    | sed -e 's/^[[:space:]]*//' -e 's/[[:space:]]*$//'
+  )
+  
+  if [[ -z "$data_dir" ]]; then
+    log "ERROR: Volume para /data não encontrado em: $COMPOSE_FILE"
+    log "Certifique-se de que seu docker-compose.yaml contém um volume mapeado para /data"
+    exit 1
+  fi
+  
+  # Se o caminho for relativo (começa com .), resolve-o em relação a SCRIPT_DIR
+  if [[ "$data_dir" == ./* ]] || [[ "$data_dir" == .\\* ]]; then
+    data_dir="${SCRIPT_DIR}/${data_dir#./}"
+  fi
+  
+  echo "$data_dir"
+}
+
 # ====== PATHS DE DADOS ======
 BKP_ROOT="$SCRIPT_DIR/autobkp"
-DATA_DIR="$SCRIPT_DIR/data"
+DATA_DIR="$(get_data_dir_from_compose)"
 WORLD_SRC="$DATA_DIR/world"
 SERVER_PROPERTIES_FILE="$DATA_DIR/server.properties"
 
@@ -221,6 +250,22 @@ test_rcon() {
   return $rc
 }
 
+players_online_list() {
+  local out
+  set +e
+  out="$(rcon list 2>/dev/null)"
+  set -e
+
+  # Tenta extrair lista de players da resposta RCON
+  # Formato típico: "There are X of Y players online: player1, player2, ..."
+  if [[ "$out" =~ :\ (.+)$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+    return 0
+  fi
+
+  echo ""
+}
+
 players_online_count() {
   local out
   set +e
@@ -299,16 +344,28 @@ check_disk_space() {
 
 # ====== BACKUP CLEANUP ======
 cleanup_old_backups() {
-  log "Limpando backups com mais de ${BACKUP_RETENTION_DAYS} dias..."
-  local removed_count=0
-  find "$BKP_ROOT" -maxdepth 1 -type d -name "*world*" -mtime "+${BACKUP_RETENTION_DAYS}" | while read -r old_backup; do
-    log "Removendo: $old_backup"
-    rm -rf "$old_backup"
-    ((removed_count++))
-  done
-  if (( removed_count == 0 )); then
-    log "Nenhum backup antigo para remover"
+  log "Verificando limite de cópias de backup (máximo: ${MAX_BACKUP_COPIES})..."
+  
+  local backup_count
+  backup_count=$(find "$BKP_ROOT" -maxdepth 1 -type d -name "*world*" 2>/dev/null | wc -l)
+  
+  if (( backup_count <= MAX_BACKUP_COPIES )); then
+    log "Total de backups: $backup_count (dentro do limite)"
+    return 0
   fi
+  
+  local to_remove=$(( backup_count - MAX_BACKUP_COPIES ))
+  log "Total de backups: $backup_count (excedeu limite em $to_remove). Removendo os mais antigos..."
+  
+  # Encontra e remove os backups mais antigos
+  find "$BKP_ROOT" -maxdepth 1 -type d -name "*world*" -printf '%T+ %p\n' 2>/dev/null \
+    | sort \
+    | head -n "$to_remove" \
+    | awk '{print $2}' \
+    | while read -r old_backup; do
+      log "Removendo backup antigo: $old_backup"
+      rm -rf "$old_backup"
+    done
 }
 
 # ====== BACKUP EXECUTION ======
@@ -420,13 +477,24 @@ restart_without_backup() {
   echo ""
   echo "Nenhuma atividade detectada - pulando backup"
   
-  broadcast_if_players "AVISO: Servidor reiniciando em 5 minutos"
-  run_step "Avisando players - Reiniciando em 5 minutos" sleep 240
+  local player_count
+  player_count="$(players_online_count || true)"
+  
+  if [[ "$player_count" =~ ^[0-9]+$ ]] && (( player_count > 0 )); then
+    local player_list
+    player_list="$(players_online_list || true)"
+    log "Players online: $player_count - $player_list"
+    
+    broadcast_if_players "AVISO: Servidor reiniciando em 5 minutos"
+    run_step "Avisando players - Reiniciando em 5 minutos" sleep 240
 
-  broadcast_if_players "AVISO: Servidor reiniciando em 1 minuto"
-  run_step "Avisando players - Reiniciando em 1 minuto" sleep 30
+    broadcast_if_players "AVISO: Servidor reiniciando em 1 minuto"
+    run_step "Avisando players - Reiniciando em 1 minuto" sleep 30
 
-  run_step "Avisando players - Contagem final de 30s" countdown_30s
+    run_step "Avisando players - Contagem final de 30s" countdown_30s
+  else
+    log "Nenhum player online - pulando contagem regressiva, iniciando backup imediatamente"
+  fi
 
   run_step "Kickando todos os players" kick_everyone
 
@@ -455,15 +523,27 @@ restart_without_backup() {
 # ====== BACKUP WITH RESTART ======
 backup_with_restart() {
   echo "Container: ${CONTAINER_NAME}"
+  echo "Dados: ${DATA_DIR}"
   echo "Backup: ${WORLD_SRC} -> ${BKP_ROOT} (timestamped by date+hour)"
 
-  broadcast_if_players "AVISO: Servidor reiniciando em 5 minutos - Backup automatico"
-  run_step "Avisando players - Reiniciando em 5 minutos" sleep 240
+  local player_count
+  player_count="$(players_online_count || true)"
+  
+  if [[ "$player_count" =~ ^[0-9]+$ ]] && (( player_count > 0 )); then
+    local player_list
+    player_list="$(players_online_list || true)"
+    log "Players online: $player_count - $player_list"
+    
+    broadcast_if_players "AVISO: Servidor reiniciando em 5 minutos - Backup automatico"
+    run_step "Avisando players - Reiniciando em 5 minutos" sleep 240
 
-  broadcast_if_players "AVISO: Servidor reiniciando em 1 minuto - Backup automatico"
-  run_step "Avisando players - Reiniciando em 1 minuto" sleep 30
+    broadcast_if_players "AVISO: Servidor reiniciando em 1 minuto - Backup automatico"
+    run_step "Avisando players - Reiniciando em 1 minuto" sleep 30
 
-  run_step "Avisando players - Contagem final de 30s" countdown_30s
+    run_step "Avisando players - Contagem final de 30s" countdown_30s
+  else
+    log "Nenhum player online - pulando contagem regressiva, iniciando backup imediatamente"
+  fi
 
   run_step "Kickando todos os players" kick_everyone
 
@@ -498,6 +578,7 @@ rotate_log_if_needed
 
 log "=========================================="
 log "Iniciando backup do container: ${CONTAINER_NAME}"
+log "Dados carregados de: ${DATA_DIR}"
 log "=========================================="
 
 validate_compose_config
