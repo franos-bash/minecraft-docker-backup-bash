@@ -18,7 +18,7 @@ This is an automated backup script for Minecraft servers running in Docker conta
 1. Stop your server container `docker stop container-name`
 2. Make a copy of your entire container directory before testing `cp -r /container/path/mc-container /container/path/mc-container.bkp`
 3. Start the Container `cd /container/path/mc-container && docker-compose up -d`
-4. Download backup.sh file
+4. Download backup.sh file `git clone https://github.com/franos-bash/minecraft-docker-backup-bash.git`
 5. Place it on the same directory as your minecraft server's docker-compose.yml file
 6. Make the script executable `sudo chmod +x backup.sh` or on GUI: right click on file > properties > execute as program
 7. Check if server is running healthy`docker ps` 
